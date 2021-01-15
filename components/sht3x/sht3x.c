@@ -12,10 +12,10 @@
 #define NACK_VAL 0x1                        /*!< I2C nack value */
 
 #define IIC_CTRL_NUM I2C_NUM_0              /*!< I2C port number */
-#define SDA_PIN_NUM 2                        /*!< gpio number for I2C data  */
-#define SCL_PIN_NUM 14                      /*!< gpio number for I2C clock */
+#define SDA_PIN_NUM CONFIG_SHT3X_I2C_SDA_PIN_NUM                      /*!< gpio number for I2C data  */
+#define SCL_PIN_NUM CONFIG_SHT3X_I2C_SCL_PIN_NUM                      /*!< gpio number for I2C clock */
 
-#define SHT3X_DeviceAddr (0x44<<1)          /* SHT3X的器件地址 */
+#define SHT3X_DeviceAddr (CONFIG_SHT3X_DEVICE_ADDR<<1)          /* SHT3X的器件地址 */
 
 /* 枚举SHT3x命令列表 */
 typedef enum
