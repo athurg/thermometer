@@ -1,7 +1,8 @@
 #include <string.h>
 #include <sys/param.h>
-#include "driver/i2c.h"
+#include <driver/i2c.h>
 #include <freertos/task.h>
+#include <esp_log.h>
 
 #define WRITE_BIT 0x00                      /*!< I2C master write */
 #define READ_BIT 0x01                       /*!< I2C master read  */
@@ -16,6 +17,9 @@
 #define SCL_PIN_NUM CONFIG_SHT3X_I2C_SCL_PIN_NUM                      /*!< gpio number for I2C clock */
 
 #define SHT3X_DeviceAddr (CONFIG_SHT3X_DEVICE_ADDR<<1)          /* SHT3X的器件地址 */
+
+//日志标签
+static const char *TAG="MAIN";
 
 /* 枚举SHT3x命令列表 */
 typedef enum
@@ -71,8 +75,17 @@ static esp_err_t i2c_master_init(void)
     conf.scl_pullup_en = GPIO_PULLUP_ENABLE;
     conf.clk_stretch_tick = 300;     /* 标准模式(100 kbit/s) */
 
-	ESP_ERROR_CHECK(i2c_driver_install(i2c_master_port, conf.mode));
-    ESP_ERROR_CHECK(i2c_param_config(i2c_master_port, &conf));
+	esp_err_t ret;
+	ret = i2c_driver_install(i2c_master_port, conf.mode);
+	if (ret != ESP_OK ){
+		return ret;
+	}
+
+    ret = i2c_param_config(i2c_master_port, &conf);
+	if (ret != ESP_OK ){
+		return ret;
+	}
+
     return ESP_OK;
 }
 
@@ -120,18 +133,26 @@ static esp_err_t SHT3x_Recv_Data(size_t data_len, uint8_t* data_arr)
 /* 描述：读取传感器编号
  * 参数：存储编号数据的指针
  * 返回值：0-读取成功，1-读取失败 */
-uint8_t SHT3x_ReadSerialNumber(uint32_t* serialNumber)
+esp_err_t SHT3x_ReadSerialNumber(uint32_t* serialNumber)
 {
 	uint8_t Num_buf[4] = {0xFF,0xFF,0xFF,0xFF};
 
 	SHT3x_Send_Cmd(READ_SERIAL_NUMBER);
 	vTaskDelay(500 / portTICK_PERIOD_MS);   /* 延时50ms，有问题时需要适当延长！！！！！！*/
+
 	esp_err_t ret = SHT3x_Recv_Data(4,Num_buf);
 
 	*serialNumber = ((Num_buf[0] << 24) | (Num_buf[1] << 16) |(Num_buf[2] << 8) |(Num_buf[3]));
-	if(0xFFFFFFFF == *serialNumber) return 1;
-    else if(ret == ESP_OK) return 0;
-    printf("SHT3x_ReadSerialNumber ERR :%s\n",esp_err_to_name(ret));
+	if(0xFFFFFFFF == *serialNumber) {
+		return ESP_ERR_INVALID_RESPONSE;
+	}
+
+	//设备编码已经通过入参返回，这里只需要返回成功即可
+	if(ret == ESP_OK) {
+		return ESP_OK;
+	}
+
+    ESP_LOGE(TAG, "SHT3x_ReadSerialNumber ERR :%s",esp_err_to_name(ret));
     return ret;
 }
 
@@ -140,12 +161,20 @@ uint8_t SHT3x_ReadSerialNumber(uint32_t* serialNumber)
  * 返回值：初始化成功返回ESP_OK */
 esp_err_t sht3x_mode_init(void)
 {
-    /* 初始化IIC控制器 */
-	printf("Init I2C in master mode\n");
-    ESP_ERROR_CHECK(i2c_master_init());
+	esp_err_t ret;
 
-	printf("Reset SHT3X\n");
-	ESP_ERROR_CHECK(SHT3x_Send_Cmd(SOFT_RESET_CMD));
+    /* 初始化IIC控制器 */
+	ESP_LOGI(TAG, "Init I2C in master mode");
+    ret = i2c_master_init();
+	if (ret!=ESP_OK) {
+		return ret;
+	}
+
+	ESP_LOGI(TAG, "Reset SHT3X");
+	ret = SHT3x_Send_Cmd(SOFT_RESET_CMD);
+	if (ret!=ESP_OK) {
+		return ret;
+	}
 	return ESP_OK;
 }
 
@@ -196,7 +225,7 @@ uint8_t sht3x_get_humiture_periodic(uint16_t *Tem_val,uint16_t *Hum_val)
 	/* 校验温度数据和湿度数据是否接收正确 */
 	if(CheckCrc8(buff, 0xFF) != buff[2] || CheckCrc8(&buff[3], 0xFF) != buff[5])
 	{
-		printf("CRC_ERROR,ret = 0x%x\r\n",ret);
+		ESP_LOGE(TAG, "CRC_ERROR,ret = 0x%x",ret);
 		return 1;
 	}
 
@@ -216,7 +245,7 @@ uint8_t sht3x_get_humiture_periodic(uint16_t *Tem_val,uint16_t *Hum_val)
 		*Tem_val = (uint16_t)(Temperature * 100);
 		*Hum_val = (uint16_t)(Humidity * 100);
 		return 0;
-	}
-	else
+	} else{
 		return 1;
+	}
 }
