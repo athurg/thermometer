@@ -92,7 +92,7 @@ esp_err_t metrics_get_handler(httpd_req_t *req)
 	metric_sn.value = 0;
 	ret = SHT3x_ReadSerialNumber(&serial_number);
 	if(ret == ESP_OK) {
-        ESP_LOGI(TAG, "Read SerialNumber 0k: 0x%x", serial_number);
+        ESP_LOGI(TAG, "Read SerialNumber ok: 0x%x", serial_number);
 		metric_sn.value = serial_number;
 	} else {
 		ESP_LOGE(TAG,"Read SerialNumber failed");
