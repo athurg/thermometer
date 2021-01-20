@@ -98,12 +98,12 @@ esp_err_t metrics_get_handler(httpd_req_t *req)
 		ESP_LOGE(TAG,"Read SerialNumber failed");
 	}
 
-    uint16_t temperature,humiture;
+    float temperature,humiture;
 	metric_temperature.value = 0;
 	metric_humiture.value = 0;
 	ret = sht3x_get_humiture_periodic(&temperature,&humiture);
 	if (ret == ESP_OK) {
-		ESP_LOGI(TAG,"temperature:%d °C, humidity:%d %%",temperature,humiture);
+		ESP_LOGI(TAG,"temperature:%.2f °C, humidity:%.2f %%",temperature,humiture);
 		metric_temperature.value = temperature;
 		metric_humiture.value = humiture;
 	} else {

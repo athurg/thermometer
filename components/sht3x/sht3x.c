@@ -210,13 +210,13 @@ static uint8_t CheckCrc8(uint8_t* const message, uint8_t initial_value)
  * 参数Tem_val：存储温度数据的指针, 温度单位为0.01°C
  * 参数Hum_val：存储湿度数据的指针, 温度单位为0.01%
  * 返回值：0-读取成功，1-读取失败 **********************************/
-uint8_t sht3x_get_humiture_periodic(uint16_t *Tem_val,uint16_t *Hum_val)
+uint8_t sht3x_get_humiture_periodic(float *Tem_val,float *Hum_val)
 {
 	uint8_t ret=0;
 	uint8_t buff[6];
 	uint16_t tem,hum;
-	double Temperature=0;
-	double Humidity=0;
+	float Temperature=0;
+	float Humidity=0;
 
 	ret = SHT3x_Send_Cmd(MEDIUM_ENABLED_CMD);
 	vTaskDelay(50 / portTICK_PERIOD_MS);   /* 延时50ms，有问题时需要适当延长！！！！！！*/
@@ -232,18 +232,18 @@ uint8_t sht3x_get_humiture_periodic(uint16_t *Tem_val,uint16_t *Hum_val)
 	/* 转换温度数据 */
 	tem = (((uint16_t)buff[0]<<8) | buff[1]);//温度数据拼接
 	// T = -45 + 175 * tem / (2^16-1)
-	Temperature= (175.0*(double)tem/65535.0-45.0) ;
+	Temperature= 175.0*tem/65535.0-45.0;
 
 	/* 转换湿度数据 */
 	hum = (((uint16_t)buff[3]<<8) | buff[4]);//湿度数据拼接
 	// RH = hum*100 / (2^16-1)
-	Humidity= (100.0*(double)hum/65535.0);
+	Humidity= 100.0*hum/65535.0;
 
 	/* 过滤错误数据 */
 	if((Temperature>=-20)&&(Temperature<=125)&&(Humidity>=0)&&(Humidity<=100))
 	{
-		*Tem_val = (uint16_t)(Temperature * 100);
-		*Hum_val = (uint16_t)(Humidity * 100);
+		*Tem_val = Temperature;
+		*Hum_val = Humidity;
 		return 0;
 	} else{
 		return 1;
