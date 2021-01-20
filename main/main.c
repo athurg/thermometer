@@ -19,6 +19,7 @@
 #include <sht3x.h>
 
 #include "webserver.h"
+#include "mqtt.h"
 
 //日志标签
 static const char *TAG="MAIN";
@@ -59,6 +60,8 @@ void app_main()
 	if (ret != ESP_OK) {
         ESP_LOGE(TAG, "Fail to connect WiFi: %X", ret);
 	}
+
+    mqtt_app_start();
 
 	ret = start_webserver();
 	if (ret != ESP_OK) {
