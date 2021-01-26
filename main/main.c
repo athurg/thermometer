@@ -50,7 +50,7 @@ void app_main()
 	//读取MAC地址并转换成字符串
 	uint8_t mac_buffer[6];
 	esp_efuse_mac_get_default(mac_buffer);
-	sprintf(mac_string, "%0X:%0X:%0X:%0X:%0X:%0X", mac_buffer[0],mac_buffer[1],mac_buffer[2],mac_buffer[3],mac_buffer[4],mac_buffer[5]);
+	sprintf(mac_string, "%02X:%02X:%02X:%02X:%02X:%02X", mac_buffer[0],mac_buffer[1],mac_buffer[2],mac_buffer[3],mac_buffer[4],mac_buffer[5]);
 	ESP_LOGI(TAG, "MAC address %s", mac_string);
 
 	//Connect WiFi
