@@ -1,0 +1,13 @@
+menu "Main Configuration"
+    config MQTT_URI
+        string "MQTT broker URL"
+        default "mqtt://mqtt.server.org:1083"
+
+    config MQTT_USERNAME
+        string "MQTT broker username"
+        default ""
+
+    config MQTT_PASSWORD
+        string "MQTT broker password"
+        default ""
+endmenu

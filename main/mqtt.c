@@ -140,7 +140,14 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
 void mqtt_app_start(void)
 {
     esp_mqtt_client_config_t mqtt_cfg = {
-        .uri = "mqtt://gcp.gooth.org",
+        .uri = CONFIG_MQTT_URI,
+
+#ifdef CONFIG_MQTT_USERNAME
+        .username = CONFIG_MQTT_USERNAME,
+#endif
+#ifdef CONFIG_MQTT_PASSWORD
+        .password = CONFIG_MQTT_PASSWORD,
+#endif
     };
 
     client = esp_mqtt_client_init(&mqtt_cfg);
