@@ -26,6 +26,9 @@ static esp_mqtt_client_handle_t client = NULL;
 extern uint32_t sht3x_sn;
 extern char mac_string[20];
 
+//数据上报间隔，默认10s
+static uint32_t report_period_ms=10000;
+
 esp_err_t mqtt_publish_data(void)
 {
 	esp_err_t ret;
@@ -59,6 +62,34 @@ esp_err_t mqtt_publish_data(void)
 	return ESP_OK;
 }
 
+static esp_err_t mqtt_message_handler(cJSON *message)
+{
+	cJSON *cmd = cJSON_GetObjectItemCaseSensitive(message, "cmd");
+	if (!cJSON_IsString(cmd) || cmd->valuestring == NULL) {
+		ESP_LOGE(TAG, "Message cmd is empty");
+		return ESP_ERR_INVALID_ARG;
+	}
+
+	ESP_LOGE(TAG, "Get new cmd %s from MQTT", cmd->valuestring);
+
+	if (strcmp("set_period", cmd->valuestring)) {
+		ESP_LOGE(TAG, "Message type %s is not support", cmd->valuestring);
+		return ESP_ERR_INVALID_ARG;
+	}
+
+	cJSON *value = cJSON_GetObjectItemCaseSensitive(message, "value");
+	if (!cJSON_IsNumber(value) || value->valueint == 0) {
+		ESP_LOGE(TAG, "Message value is empty");
+		return ESP_ERR_INVALID_ARG;
+	}
+
+	ESP_LOGE(TAG, "Get new cmd %s with value %d from MQTT", cmd->valuestring, value->valueint);
+
+	report_period_ms = value->valueint;
+
+	return ESP_OK;
+}
+
 static void mqtt_event_handler_cb(void *handler_args, esp_event_base_t base, int32_t event_id, void *event_data)
 {
 	esp_mqtt_event_handle_t event = event_data;
@@ -80,6 +111,12 @@ static void mqtt_event_handler_cb(void *handler_args, esp_event_base_t base, int
 			break;
 		case MQTT_EVENT_DATA:
 			ESP_LOGI(TAG, "MQTT_EVENT_DATA TOPIC=%.*s DATA=%.*s", event->topic_len, event->topic, event->data_len, event->data);
+			cJSON *message = cJSON_Parse(event->data);
+			if (message == NULL) {
+				ESP_LOGE("Invalid MQTT Message %s",cJSON_GetErrorPtr());
+				break;
+			}
+			mqtt_message_handler(message);
 			break;
 		case MQTT_EVENT_ERROR:
 			ESP_LOGI(TAG, "MQTT_EVENT_ERROR");
@@ -95,7 +132,7 @@ void mqtt_report_task(void *arg)
 	while(1) {
 		ESP_LOGI(TAG, "Report Loop");
 		mqtt_publish_data();
-		vTaskDelay(10000 / portTICK_PERIOD_MS);
+		vTaskDelay(report_period_ms / portTICK_PERIOD_MS);
 	}
 }
 
@@ -117,6 +154,10 @@ void mqtt_app_start(void)
 	esp_mqtt_client_register_event(client, ESP_EVENT_ANY_ID, mqtt_event_handler_cb, client);
 
 	esp_mqtt_client_start(client);
+
+	char topic[50];
+	sprintf(topic, "/devices/%s", mac_string);
+	esp_mqtt_client_subscribe(client, topic, 0);
 
 	xTaskCreate(mqtt_report_task, "mqtt_report_task", 2048, NULL, 5, NULL);
 }
