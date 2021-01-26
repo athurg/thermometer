@@ -1,11 +1,3 @@
-/* Simple HTTP Server Example
-
-   This example code is in the Public Domain (or CC0 licensed, at your option.)
-
-   Unless required by applicable law or agreed to in writing, this
-   software is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR
-   CONDITIONS OF ANY KIND, either express or implied.
-*/
 #include <sys/param.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
@@ -18,42 +10,48 @@
 #include <nvs_flash.h>
 #include <sht3x.h>
 
-#include "webserver.h"
 #include "mqtt.h"
 
 //日志标签
 static const char *TAG="MAIN";
 
-//WiFi断开事件处理函数
-static void station_disconnect_handler(void* arg, esp_event_base_t event_base, int32_t event_id, void* event_data)
-{
-	ESP_LOGI(TAG, "WiFi station was disconnected");
-	ESP_LOGI(TAG, "Starting webserver");
-	stop_webserver();
-}
-
-//WiFi获取到IP事件处理函数
-static void station_got_ip_handler(void* arg, esp_event_base_t event_base, int32_t event_id, void* event_data)
-{
-	ESP_LOGI(TAG, "WiFi station got new ip");
-	ESP_LOGI(TAG, "Stop webserver");
-	start_webserver();
-}
+uint32_t sht3x_sn;
+char mac_string[20];
 
 void app_main()
 {
+	//用户层初始化
+	esp_err_t ret;
+
 	//系统层初始化，失败直接panic
     ESP_ERROR_CHECK(nvs_flash_init());
     ESP_ERROR_CHECK(esp_netif_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());
 
-	//用户层初始化
-	esp_err_t ret;
-
+	//芯片初始化
 	ret = sht3x_mode_init();
 	if (ret != ESP_OK) {
         ESP_LOGE(TAG, "Fail to init SHT3X: %X", ret);
+		vTaskDelay(3000 / portTICK_PERIOD_MS);
+		esp_restart();
 	}
+
+	vTaskDelay(1000 / portTICK_PERIOD_MS);
+	//读取传感器序列号
+	ret = SHT3x_ReadSerialNumber(&sht3x_sn);
+	if(ret != ESP_OK) {
+		ESP_LOGE(TAG,"Read SerialNumber failed");
+		vTaskDelay(3000 / portTICK_PERIOD_MS);
+		esp_restart();
+	}
+
+	ESP_LOGI(TAG, "Sensor SHT3X SN=0x%x", sht3x_sn);
+
+	//读取MAC地址并转换成字符串
+	uint8_t mac_buffer[6];
+	esp_efuse_mac_get_default(mac_buffer);
+	sprintf(mac_string, "%0X:%0X:%0X:%0X:%0X:%0X", mac_buffer[0],mac_buffer[1],mac_buffer[2],mac_buffer[3],mac_buffer[4],mac_buffer[5]);
+	ESP_LOGI(TAG, "MAC address %s", mac_string);
 
 	//Connect WiFi
 	ret = example_connect();
@@ -62,19 +60,4 @@ void app_main()
 	}
 
     mqtt_app_start();
-
-	ret = start_webserver();
-	if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "Fail to start webserver: %X", ret);
-	}
-
-    ret = esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP, &station_got_ip_handler, NULL);
-	if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "Fail to register IP_EVENT_STA_GOT_IP handler: %X", ret);
-	}
-
-    ret = esp_event_handler_register(WIFI_EVENT, WIFI_EVENT_STA_DISCONNECTED, &station_disconnect_handler, NULL);
-	if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "Fail to register WIFI_EVENT_STA_DISCONNECTED handler: %X", ret);
-	}
 }
