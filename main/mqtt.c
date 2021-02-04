@@ -100,17 +100,8 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
 	esp_mqtt_event_handle_t event = event_data;
 	switch (event->event_id) {
 		case MQTT_EVENT_ERROR:
-			ESP_LOGE(TAG, "MQTT error, reboot wifi");
-			esp_err_t ret = example_disconnect();
-			if (ret!=ESP_OK) {
-				ESP_LOGE(TAG, "Disconnect wifi failed %d", ret);
-				return;
-			}
-			ret = example_connect();
-			if (ret!=ESP_OK) {
-				ESP_LOGE(TAG, "Reconnect wifi failed %d", ret);
-				return;
-			}
+			ESP_LOGE(TAG, "MQTT error, reboot device");
+			esp_restart();
 			break;
 		case MQTT_EVENT_CONNECTED:
 			sprintf(topic, "/devices/%s", mac_string);
