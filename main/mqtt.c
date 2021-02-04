@@ -17,52 +17,22 @@
 #include <lwip/netdb.h>
 #include <cJSON.h>
 #include <esp_log.h>
+#include <protocol_examples_common.h>
 #include <sht3x.h>
 
 #include "mqtt_client.h"
 
-static const char *TAG = "MQTT";
-static esp_mqtt_client_handle_t client = NULL;
 extern uint32_t sht3x_sn;
 extern char mac_string[20];
 
+static const char *TAG = "main.mqtt";
+static esp_mqtt_client_handle_t client = NULL;
+
 //数据上报间隔，默认10s
+static bool mqtt_client_connected;
 static uint32_t report_period_ms=10000;
 
-esp_err_t mqtt_publish_data(void)
-{
-	esp_err_t ret;
-
-	float temperature,humiture;
-	ret = sht3x_get_humiture_periodic(&temperature,&humiture);
-	if (ret != ESP_OK) {
-		ESP_LOGE(TAG,"Fail to get Humiture failed");
-		return ret;
-	}
-
-	ESP_LOGI(TAG,"temperature:%.2f °C, humidity:%.2f %%",temperature,humiture);
-
-	cJSON *data = cJSON_CreateObject();
-	cJSON_AddNumberToObject(data,"temperature",temperature);
-	cJSON_AddNumberToObject(data,"humiture",humiture);
-
-	cJSON *message = cJSON_CreateObject();   //创建根数据对象
-	cJSON_AddStringToObject(message, "type", "report");
-	cJSON_AddStringToObject(message, "mac", mac_string);
-	cJSON_AddNumberToObject(message, "sn", sht3x_sn);
-	cJSON_AddItemToObject(message, "data", data);
-
-	char *out = cJSON_Print(message);
-
-	int msg_id = esp_mqtt_client_publish(client, "/sensor/temperature", out, 0, 1, 0);
-	ESP_LOGI(TAG, "sent publish successful, msg_id=%d", msg_id);
-
-	cJSON_Delete(message);
-
-	return ESP_OK;
-}
-
-static esp_err_t mqtt_message_handler(cJSON *message)
+esp_err_t mqtt_message_handler(cJSON *message)
 {
 	cJSON *cmd = cJSON_GetObjectItemCaseSensitive(message, "cmd");
 	if (!cJSON_IsString(cmd) || cmd->valuestring == NULL) {
@@ -90,27 +60,75 @@ static esp_err_t mqtt_message_handler(cJSON *message)
 	return ESP_OK;
 }
 
-static void mqtt_event_handler_cb(void *handler_args, esp_event_base_t base, int32_t event_id, void *event_data)
+esp_err_t mqtt_publish_data(void)
 {
+	esp_err_t ret;
+
+	float temperature,humiture;
+	ret = sht3x_get_humiture_periodic(&temperature,&humiture);
+	if (ret != ESP_OK) {
+		ESP_LOGE(TAG,"Fail to get Humiture failed");
+		return ret;
+	}
+
+	ESP_LOGI(TAG,"temperature:%.2f °C, humidity:%.2f %%",temperature,humiture);
+
+	cJSON *data = cJSON_CreateObject();
+	cJSON_AddNumberToObject(data,"temperature",temperature);
+	cJSON_AddNumberToObject(data,"humiture",humiture);
+
+	cJSON *message = cJSON_CreateObject();   //创建根数据对象
+	cJSON_AddStringToObject(message, "type", "report");
+	cJSON_AddStringToObject(message, "mac", mac_string);
+	cJSON_AddNumberToObject(message, "sn", sht3x_sn);
+	cJSON_AddNumberToObject(message, "up", esp_log_early_timestamp());
+	cJSON_AddItemToObject(message, "data", data);
+
+	char *out = cJSON_Print(message);
+
+	int msg_id = esp_mqtt_client_publish(client, "/sensor/temperature", out, 0, 0, 0);
+	ESP_LOGI(TAG, "sent publish successful, msg_id=%d", msg_id);
+
+	cJSON_Delete(message);
+
+	return ESP_OK;
+}
+
+static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_t event_id, void *event_data)
+{
+	char topic[50];
 	esp_mqtt_event_handle_t event = event_data;
 	switch (event->event_id) {
+		case MQTT_EVENT_ERROR:
+			ESP_LOGE(TAG, "MQTT error, reboot wifi");
+			esp_err_t ret = example_disconnect();
+			if (ret!=ESP_OK) {
+				ESP_LOGE(TAG, "Disconnect wifi failed %d", ret);
+				return;
+			}
+			ret = example_connect();
+			if (ret!=ESP_OK) {
+				ESP_LOGE(TAG, "Reconnect wifi failed %d", ret);
+				return;
+			}
+			break;
 		case MQTT_EVENT_CONNECTED:
-			ESP_LOGI(TAG, "MQTT_EVENT_CONNECTED");
+			sprintf(topic, "/devices/%s", mac_string);
+			esp_mqtt_client_subscribe(client, topic, 0);
+
+			ESP_LOGW(TAG, "MQTT connect, subscribe to %s, and enable report loop", topic);
+
+			mqtt_client_connected = true;
 			break;
+
 		case MQTT_EVENT_DISCONNECTED:
-			ESP_LOGI(TAG, "MQTT_EVENT_DISCONNECTED");
+			ESP_LOGW(TAG, "MQTT disconnect, disable report loop and restart esp");
+			mqtt_client_connected = false;
+			esp_restart();
 			break;
-		case MQTT_EVENT_SUBSCRIBED:
-			ESP_LOGI(TAG, "MQTT_EVENT_SUBSCRIBED");
-			break;
-		case MQTT_EVENT_UNSUBSCRIBED:
-			ESP_LOGI(TAG, "MQTT_EVENT_UNSUBSCRIBED");
-			break;
-		case MQTT_EVENT_PUBLISHED:
-			ESP_LOGI(TAG, "MQTT_EVENT_PUBLISHED");
-			break;
+
 		case MQTT_EVENT_DATA:
-			ESP_LOGI(TAG, "MQTT_EVENT_DATA TOPIC=%.*s DATA=%.*s", event->topic_len, event->topic, event->data_len, event->data);
+			ESP_LOGI(TAG, "TOPIC=%.*s DATA=%.*s", event->topic_len, event->topic, event->data_len, event->data);
 			cJSON *message = cJSON_Parse(event->data);
 			if (message == NULL) {
 				ESP_LOGE("Invalid MQTT Message %s",cJSON_GetErrorPtr());
@@ -118,25 +136,45 @@ static void mqtt_event_handler_cb(void *handler_args, esp_event_base_t base, int
 			}
 			mqtt_message_handler(message);
 			break;
-		case MQTT_EVENT_ERROR:
-			ESP_LOGI(TAG, "MQTT_EVENT_ERROR");
-			break;
 		default:
-			ESP_LOGI(TAG, "MQTT_EVENT_UNKNOWN(%d)", event->event_id);
+			ESP_LOGW(TAG, "MQTT event %d", event->event_id);
 			break;
 	}
 }
 
 void mqtt_report_task(void *arg)
 {
-	while(1) {
-		ESP_LOGI(TAG, "Report Loop");
-		mqtt_publish_data();
+	esp_err_t ret;
+	while(true) {
 		vTaskDelay(report_period_ms / portTICK_PERIOD_MS);
+
+		ESP_LOGI(TAG, "MQTT report loop");
+
+		//打印Wi-Fi信息
+		wifi_ap_record_t ap_info;
+		ret = esp_wifi_sta_get_ap_info(&ap_info);
+		if (ret!=ESP_OK){
+			ESP_LOGE(TAG, "Get WiFi info failed %d", ret);
+			continue;
+		}
+		ESP_LOGI(TAG, "WiFi connect to %s RSSI=%d", ap_info.ssid, ap_info.rssi);
+
+		if (!mqtt_client_connected) {
+			continue;
+		}
+
+		ret = mqtt_publish_data();
+		if (ret != ESP_OK) {
+			ESP_LOGE(TAG, "Publish failed %d", ret);
+			continue;
+		}
+
+		ESP_LOGI(TAG, "MQTT publish success");
 	}
 }
 
-void mqtt_app_start(void)
+
+void mqtt_app_init(void)
 {
 	esp_mqtt_client_config_t mqtt_cfg = {
 		.uri = CONFIG_MQTT_URI,
@@ -150,14 +188,19 @@ void mqtt_app_start(void)
 	};
 
 	client = esp_mqtt_client_init(&mqtt_cfg);
-
-	esp_mqtt_client_register_event(client, ESP_EVENT_ANY_ID, mqtt_event_handler_cb, client);
-
-	esp_mqtt_client_start(client);
-
-	char topic[50];
-	sprintf(topic, "/devices/%s", mac_string);
-	esp_mqtt_client_subscribe(client, topic, 0);
+	esp_mqtt_client_register_event(client, MQTT_EVENT_ANY, mqtt_event_handler, client);
 
 	xTaskCreate(mqtt_report_task, "mqtt_report_task", 2048, NULL, 5, NULL);
+}
+
+void mqtt_app_start(void)
+{
+	ESP_LOGW(TAG, "Start mqtt app");
+	esp_mqtt_client_start(client);
+}
+
+void mqtt_app_stop(void)
+{
+	ESP_LOGW(TAG, "Stop mqtt app");
+	esp_mqtt_client_stop(client);
 }
