@@ -9,7 +9,6 @@ menu "SHT3x Configuration"
 
     config SHT3X_I2C_SCL_PIN_NUM
         int "I2C SCL PIN NUM"
-        default 14
-        select LWIP_IPV6
+        default 0
 endmenu
 
