@@ -171,10 +171,14 @@ void mqtt_app_init(void)
 		.uri = CONFIG_MQTT_URI,
 #ifdef CONFIG_MQTT_USERNAME
 		.username = CONFIG_MQTT_USERNAME,
+#else
+		.username = platform_create_id_string(),
 #endif
 
 #ifdef CONFIG_MQTT_PASSWORD
 		.password = CONFIG_MQTT_PASSWORD,
+#else
+		.password = platform_create_id_string(),
 #endif
 	};
 
