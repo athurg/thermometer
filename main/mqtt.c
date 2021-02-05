@@ -22,6 +22,7 @@
 
 #include "mqtt_client.h"
 
+char *platform_create_id_string(void);
 extern uint32_t sht3x_sn;
 extern char mac_string[20];
 
@@ -169,18 +170,10 @@ void mqtt_app_init(void)
 {
 	esp_mqtt_client_config_t mqtt_cfg = {
 		.uri = CONFIG_MQTT_URI,
-#ifdef CONFIG_MQTT_USERNAME
-		.username = CONFIG_MQTT_USERNAME,
-#else
 		.username = platform_create_id_string(),
-#endif
-
-#ifdef CONFIG_MQTT_PASSWORD
-		.password = CONFIG_MQTT_PASSWORD,
-#else
 		.password = platform_create_id_string(),
-#endif
 	};
+
 
 	client = esp_mqtt_client_init(&mqtt_cfg);
 	esp_mqtt_client_register_event(client, MQTT_EVENT_ANY, mqtt_event_handler, client);
