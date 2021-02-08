@@ -88,6 +88,8 @@ esp_err_t mqtt_publish_data(void)
 	char *out = cJSON_Print(message);
 
 	int msg_id = esp_mqtt_client_publish(client, "/sensor/temperature", out, 0, 0, 0);
+	cJSON_free(out);
+
 	ESP_LOGI(TAG, "sent publish successful, msg_id=%d", msg_id);
 
 	cJSON_Delete(message);
