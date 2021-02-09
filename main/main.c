@@ -5,11 +5,11 @@
 #include <esp_log.h>
 #include <esp_netif.h>
 #include <esp_event.h>
-#include <protocol_examples_common.h>
 #include <nvs.h>
 #include <nvs_flash.h>
 #include <sht3x.h>
 
+#include "wifi.h"
 #include "mqtt.h"
 #include "time.h"
 
@@ -18,23 +18,6 @@ static const char *TAG="MAIN";
 
 uint32_t sht3x_sn;
 char mac_string[20];
-
-static void on_wifi_disconnect(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data)
-{
-	ESP_LOGW(TAG, "Wi-Fi event %d", event_id);
-	if(event_id==WIFI_EVENT_STA_DISCONNECTED) {
-		mqtt_app_stop();
-	}
-}
-
-static void on_got_ip(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data)
-{
-	ESP_LOGW(TAG, "IP event %d", event_id);
-	if (event_id==IP_EVENT_STA_GOT_IP) {
-		mqtt_app_start();
-	}
-}
-
 
 void app_main()
 {
@@ -71,16 +54,13 @@ void app_main()
 	sprintf(mac_string, "%02X:%02X:%02X:%02X:%02X:%02X", mac_buffer[0],mac_buffer[1],mac_buffer[2],mac_buffer[3],mac_buffer[4],mac_buffer[5]);
 	ESP_LOGI(TAG, "MAC address %s", mac_string);
 
-	ESP_ERROR_CHECK(esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID, &on_wifi_disconnect, NULL))
-	ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT, ESP_EVENT_ANY_ID, &on_got_ip, NULL))
-
-    mqtt_app_init();
-
 	//所有初始化完成方可联网
-	ret = example_connect();
+	ret = wifi_init();
 	if (ret != ESP_OK) {
         ESP_LOGE(TAG, "Fail to connect WiFi: %X", ret);
 	}
+
+    mqtt_app_init();
 
 	wait_time_sync();
 }

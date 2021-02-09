@@ -1,5 +1,18 @@
-menu "Main Configuration"
+menu "Main APP Configuration"
     config MQTT_URI
         string "MQTT broker URL"
         default "mqtt://mqtt.server.org:1083"
+
+    config WIFI_DEFAULT_SSID
+        string "WiFi SSID"
+        default "myssid"
+        help
+            SSID (network name) for the example to connect to.
+
+    config WIFI_DEFAULT_PASSWORD
+        string "WiFi Password"
+        default "mypassword"
+        help
+            WiFi password (WPA or WPA2) for the example to use.
+            Can be left blank if the network has no security set.
 endmenu

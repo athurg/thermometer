@@ -7,7 +7,6 @@
 #include <nvs_flash.h>
 #include <esp_event.h>
 #include <esp_netif.h>
-#include <protocol_examples_common.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include <freertos/semphr.h>
@@ -17,11 +16,11 @@
 #include <lwip/netdb.h>
 #include <cJSON.h>
 #include <esp_log.h>
-#include <protocol_examples_common.h>
 #include <sht3x.h>
 
 #include "mqtt_client.h"
 
+static char mqtt_addr[100] = CONFIG_MQTT_URI;
 char *platform_create_id_string(void);
 extern uint32_t sht3x_sn;
 extern char mac_string[20];
@@ -102,10 +101,6 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
 	char topic[50];
 	esp_mqtt_event_handle_t event = event_data;
 	switch (event->event_id) {
-		case MQTT_EVENT_ERROR:
-			ESP_LOGE(TAG, "MQTT error, reboot device");
-			esp_restart();
-			break;
 		case MQTT_EVENT_CONNECTED:
 			sprintf(topic, "/devices/%s", mac_string);
 			esp_mqtt_client_subscribe(client, topic, 0);
@@ -116,9 +111,8 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
 			break;
 
 		case MQTT_EVENT_DISCONNECTED:
-			ESP_LOGW(TAG, "MQTT disconnect, disable report loop and restart esp");
+			ESP_LOGW(TAG, "MQTT disconnect, disable report loop");
 			mqtt_client_connected = false;
-			esp_restart();
 			break;
 
 		case MQTT_EVENT_DATA:
@@ -167,30 +161,62 @@ void mqtt_report_task(void *arg)
 	}
 }
 
-
-void mqtt_app_init(void)
-{
-	esp_mqtt_client_config_t mqtt_cfg = {
-		.uri = CONFIG_MQTT_URI,
-		.username = platform_create_id_string(),
-		.password = platform_create_id_string(),
-	};
-
-
-	client = esp_mqtt_client_init(&mqtt_cfg);
-	esp_mqtt_client_register_event(client, MQTT_EVENT_ANY, mqtt_event_handler, client);
-
-	xTaskCreate(mqtt_report_task, "mqtt_report_task", 2048, NULL, 5, NULL);
-}
-
-void mqtt_app_start(void)
+static void mqtt_app_start(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data)
 {
 	ESP_LOGW(TAG, "Start mqtt app");
 	esp_mqtt_client_start(client);
 }
 
-void mqtt_app_stop(void)
+static void mqtt_app_stop(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data)
 {
 	ESP_LOGW(TAG, "Stop mqtt app");
 	esp_mqtt_client_stop(client);
+}
+
+static esp_err_t load_mqtt_param(void)
+{
+	esp_err_t ret;
+
+	nvs_handle nvs_handle;
+	ret = nvs_open("params", NVS_READWRITE, &nvs_handle);
+	if (ret!=ESP_OK) {
+		ESP_LOGE(TAG, "Fail to open NVS param handle %d", ret);
+		return ret;
+	}
+
+	size_t length;
+	static char buff[32];
+	ret = nvs_get_str(nvs_handle, "mqtt_addr", buff, &length);
+	if (ret != ESP_OK) {
+		nvs_close(nvs_handle);
+		ESP_LOGE(TAG, "Fail to read wifi_ssid from NVS param %d", ret);
+		return ret;
+	}
+
+	if (strlen(buff)>0) {
+		sprintf(mqtt_addr, "mqtt://%s", buff);
+		ESP_LOGI(TAG, "Load mqtt server %s from NVS", mqtt_addr);
+	}
+
+	return ESP_OK;
+}
+
+void mqtt_app_init(void)
+{
+	esp_mqtt_client_config_t mqtt_cfg = {
+		.uri = mqtt_addr,
+		.username = platform_create_id_string(),
+		.password = platform_create_id_string(),
+	};
+
+	load_mqtt_param();
+
+	ESP_LOGI(TAG, "Connect to mqtt %s", mqtt_cfg.uri);
+	client = esp_mqtt_client_init(&mqtt_cfg);
+	esp_mqtt_client_register_event(client, MQTT_EVENT_ANY, mqtt_event_handler, client);
+
+	ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP, &mqtt_app_start, NULL))
+	ESP_ERROR_CHECK(esp_event_handler_register(WIFI_EVENT, WIFI_EVENT_STA_DISCONNECTED, &mqtt_app_stop, NULL))
+
+	xTaskCreate(mqtt_report_task, "mqtt_report_task", 2048, NULL, 5, NULL);
 }
