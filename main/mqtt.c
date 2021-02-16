@@ -175,6 +175,7 @@ void mqtt_app_init(void)
 	};
 
 
+	ESP_LOGI(TAG, "Start mqtt app on %s with %s(%s)", mqtt_cfg.uri, mqtt_cfg.username, mqtt_cfg.password);
 	client = esp_mqtt_client_init(&mqtt_cfg);
 	esp_mqtt_client_register_event(client, MQTT_EVENT_ANY, mqtt_event_handler, client);
 
