@@ -5,10 +5,10 @@ menu "SHT3x Configuration"
 
     config SHT3X_I2C_SDA_PIN_NUM
         int "I2C SDA PIN NUM"
-        default 2
+        default 4
 
     config SHT3X_I2C_SCL_PIN_NUM
         int "I2C SCL PIN NUM"
-        default 0
+        default 5
 endmenu
 
