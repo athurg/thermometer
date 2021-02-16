@@ -103,8 +103,7 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
 	esp_mqtt_event_handle_t event = event_data;
 	switch (event->event_id) {
 		case MQTT_EVENT_ERROR:
-			ESP_LOGE(TAG, "MQTT error, reboot device");
-			esp_restart();
+			ESP_LOGE(TAG, "MQTT error");
 			break;
 		case MQTT_EVENT_CONNECTED:
 			sprintf(topic, "/devices/%s", mac_string);
@@ -116,9 +115,8 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
 			break;
 
 		case MQTT_EVENT_DISCONNECTED:
-			ESP_LOGW(TAG, "MQTT disconnect, disable report loop and restart esp");
+			ESP_LOGW(TAG, "MQTT disconnect, disable report loop");
 			mqtt_client_connected = false;
-			esp_restart();
 			break;
 
 		case MQTT_EVENT_DATA:
