@@ -1,2 +1,2 @@
 # CONFIG_NEWLIB_NANO_FORMAT is not set
-CONFIG_MQTT_URI="mqtt://mqtt.gooth.org
+CONFIG_MQTT_URI="mqtt://mqtt.gooth.org"
